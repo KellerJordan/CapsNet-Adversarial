@@ -4,7 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import torch
-import torch.nn as nn
+from torch import nn
+from torch.autograd import Variable
 import torchvision
 
 
@@ -37,7 +38,7 @@ def get_accuracy(pred, target):
     return correct / len(pred)
 
 class Trainer():
-    def __init__(self, model, optimizer, trn_loader, tst_loader):
+    def __init__(self, model, optimizer, criterion, trn_loader, tst_loader, use_cuda=False):
         self.model = model
         self.criterion = criterion
         self.optimizer = optimizer
@@ -53,6 +54,7 @@ class Trainer():
                 'tst':[]
             },
         }
+        self.use_cuda = use_cuda
     
     def run(self, epochs):
         for epoch in range(1, epochs+1):
@@ -72,6 +74,9 @@ class Trainer():
         cum_loss = 0
         cum_acc = 0
         for i, (X, y) in enumerate(self.trn_loader):
+            if self.use_cuda:
+                X = X.cuda()
+                y = y.cuda()
             X_var = Variable(X)
             y_var = Variable(y)
 
@@ -87,7 +92,7 @@ class Trainer():
             cum_acc += acc
             cum_loss += loss.data[0]
         
-        return cum_loss, cum_acc
+        return cum_loss / n_batches, cum_acc / n_batches
     
     def test(self):
         self.model.eval()
@@ -96,6 +101,9 @@ class Trainer():
         cum_loss = 0
         cum_acc = 0
         for i, (X, y) in enumerate(self.tst_loader):
+            if self.use_cuda:
+                X = X.cuda()
+                y = y.cuda()
             X_var = Variable(X)
             y_var = Variable(y)
 
@@ -107,7 +115,7 @@ class Trainer():
             cum_acc += acc
             cum_loss += loss.data[0]
         
-        return cum_loss, cum_acc
+        return cum_loss / n_batches, cum_acc / n_batches
 
     def save_checkpoint(self, filename='checkpoint.pth.tar'):
         state = {

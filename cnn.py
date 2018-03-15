@@ -12,25 +12,22 @@ class CNN(nn.Module):
         pool_layers = 3
         fc_h = int(h / 2**pool_layers)
         fc_w = int(w / 2**pool_layers)
-        self.conv1 = conv_bn_relu(c, 16)
-        self.conv2 = conv_bn_relu(16, 32)
-        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.conv3 = conv_bn_relu(32, 64)
-        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-        self.conv4 = conv_bn_relu(64, 128)
-        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.conv = nn.Sequential(
+            *conv_bn_relu(c, 16),
+            *conv_bn_relu(16, 32),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            *conv_bn_relu(32, 64),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+            *conv_bn_relu(64, 128),
+            nn.MaxPool2d(kernel_size=2, stride=2),
+        )
+        self.flatten = lambda x: x.view(-1, 128*fc_h*fc_w)
         self.linear1 = nn.Linear(128*fc_h*fc_w, 128)
         self.linear2 = nn.Linear(128, n_classes)
     
     def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        x = self.pool1(x)
-        x = self.conv3(x)
-        x = self.pool2(x)
-        x = self.conv4(x)
-        x = self.pool3(x)
-        x = x.view(x.size(0), -1)
+        x = self.conv(x)
+        x = self.flatten(x)
         x = self.linear1(x)
         x = self.linear2(x)
         return x
