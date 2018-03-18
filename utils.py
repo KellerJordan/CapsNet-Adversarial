@@ -10,6 +10,10 @@ import torchvision
 
 
 def plot_tensor(img, fs=(10, 10), title=''):
+    # preprocess input
+    if type(img) == Variable:
+        img = img.data
+    img = img.cpu()
     if torch.tensor._TensorBase in type(img).__bases__:
         npimg = img.numpy()
     else:
@@ -17,6 +21,7 @@ def plot_tensor(img, fs=(10, 10), title=''):
     if len(npimg.shape) == 4:
         npimg = np.squeeze(npimg)
     npimg = npimg.transpose(1, 2, 0)
+    # display images
     plt.figure(figsize=fs)
     if npimg.shape[2] > 1:
         plt.imshow(npimg)
@@ -36,6 +41,9 @@ def get_argmax(scores):
 def get_accuracy(pred, target):
     correct = np.sum(pred == target)
     return correct / len(pred)
+
+def count_params(model):
+    return sum(p.numel() for p in model.parameters())
 
 class Trainer():
     def __init__(self, model, optimizer, criterion, trn_loader, tst_loader, use_cuda=False):
