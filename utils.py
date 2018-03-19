@@ -26,6 +26,7 @@ def plot_tensor(img, fs=(10, 10), title=''):
     if npimg.shape[2] > 1:
         plt.imshow(npimg)
     else:
+        npimg = npimg.squeeze()
         plt.imshow(npimg, cmap='gray')
     plt.title(title)
     plt.show()
@@ -81,26 +82,29 @@ class Trainer():
     def run(self, epochs):
         print('[*] Training for %d epochs' % epochs)
         for epoch in range(1, epochs+1):
-            
-            self.model.train()
-            trn_loss, trn_acc = self.run_epoch(self.trn_loader)
-            self.model.eval()
-            tst_loss, tst_acc = self.run_epoch(self.tst_loader)
-            
+            trn_loss, trn_acc = self.train()
+            tst_loss, tst_acc = self.test()
             print('[*] Epoch %d, TrnLoss: %.3f, TrnAcc: %.3f, TstLoss: %.3f, TstAcc: %.3f'
                 % (epoch, trn_loss, trn_acc, tst_loss, tst_acc))
-            
             self.metrics['accuracy']['trn'].append(trn_acc)
             self.metrics['accuracy']['tst'].append(tst_acc)
             self.metrics['loss']['trn'].append(trn_loss)
             self.metrics['loss']['tst'].append(tst_loss)
+    
+    def train(self):
+        self.model.train()
+        return self.run_epoch(self.trn_loader)
+    
+    def test(self):
+        self.model.eval()
+        return self.run_epoch(self.tst_loader, train=False)
     
     def make_var(self, tensor):
         if self.use_cuda:
             tensor = tensor.cuda()
         return Variable(tensor)
     
-    def run_epoch(self, loader):
+    def run_epoch(self, loader, train=True):
         n_batches = len(loader)
         cum_loss = 0
         cum_acc = 0
@@ -115,9 +119,10 @@ class Trainer():
                 scores = self.model(X_var)
                 loss_var = self.criterion(scores, y_var)
 
-            self.optimizer.zero_grad()
-            loss_var.backward()
-            self.optimizer.step()
+            if train:
+                self.optimizer.zero_grad()
+                loss_var.backward()
+                self.optimizer.step()
 
             pred = get_argmax(scores)
             acc = get_accuracy(pred, y)
