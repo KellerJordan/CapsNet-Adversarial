@@ -5,7 +5,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 
 
-class CapsNet(nn.Module):
+class CapsuleNetwork(nn.Module):
     
     def __init__(self):
         super().__init__()
@@ -74,12 +74,12 @@ class CapsuleLayer(nn.Module):
                 updates = (outputs[..., None, :] @ u_hats).squeeze().transpose(1, 2)
                 # batch_size, in_caps, out_caps
                 
-                logits += updates
+                logits = logits + updates
         
         return outputs
 
     
-class ReconstructionNet(nn.Module):
+class ReconstructionNetwork(nn.Module):
     
     def __init__(self):
         super().__init__()
@@ -96,40 +96,46 @@ class ReconstructionNet(nn.Module):
 
 class CapsuleDecoder(nn.Module):
     
-    def __init__(self):
+    def __init__(self, reconstruction=True):
         super().__init__()
-        self.decoder = ReconstructionNet()
+        self.reconstruction = reconstruction
+        if reconstruction:
+            self.decoder = ReconstructionNetwork()
     
     def forward(self, d_caps):
-        reconstructions = self.decoder(d_caps.view(d_caps.size(0), -1))
         logits = torch.norm(d_caps, dim=-1)
-        probs = F.softmax(logits, dim=0) # THIS SHOULD NOT NECESSARILY BE HERE
-        return reconstructions, probs
+        probs = F.softmax(logits, dim=1) # THIS SHOULD NOT NECESSARILY BE HERE
+        if self.reconstruction:
+            img_hats = self.decoder(d_caps.view(d_caps.size(0), -1))
+            return probs, img_hats
+        else:
+            return probs
 
-class CapsLoss(nn.Module):
+class CapsuleLoss(nn.Module):
     
-    def __init__(self):
-        super().__init__()
-        self.reconstruction_loss = nn.MSELoss()
-    
-    def forward(self, images, labels, reconstructions, probs,
+    def forward(self, probs, labels, reconstructions=None, images=None,
                 mplus=0.9, mminus=0.1, lmbda=0.5, tradeoff=0.0005):
         present = F.relu(mplus - probs)**2
         absent = F.relu(probs - mminus)**2
         margin_loss = labels * present + lmbda * (1 - labels) * absent
-        reconstruction_loss = self.reconstruction_loss(reconstructions, images)
-        return margin_loss + tradeoff * reconstruction_loss
+        margin_loss = margin_loss.sum(1)
+        if reconstructions is not None:
+            reconstruction_loss = F.mse_loss(reconstructions, images)
+            loss = margin_loss + tradeoff * reconstruction_loss
+        else:
+            loss = margin_loss
+        return loss.mean()
         
-class CapsPipeline(nn.Module):
+# class CapsPipeline(nn.Module):
     
-    def __init__(self):
-        super().__init__()
-        self.network = CapsNet()
-        self.decoder = CapsuleDecoder()
-        self.loss = CapsLoss()
+#     def __init__(self):
+#         super().__init__()
+#         self.network = CapsNet()
+#         self.decoder = CapsuleDecoder()
+#         self.loss = CapsLoss()
     
-    def forward(self, images, labels):
-        capsules_v = self.network(images)
-        reconstructions, probs = self.decoder(capsules_v)
-        loss = self.loss(images, labels, reconstructions, probs)
-        return probs, reconstructions, loss
+#     def forward(self, images, labels):
+#         capsules_v = self.network(images)
+#         reconstructions, probs = self.decoder(capsules_v)
+#         loss = self.loss(images, labels, reconstructions, probs)
+#         return probs, reconstructions, loss
