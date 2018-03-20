@@ -7,31 +7,57 @@ def set_grad(model, cond):
     for p in model.parameters():
         p.requires_grad = cond
 
-def generate_fooling_image(model, seed_img, target=5,
-                  n_iters=100, alpha=0.005):
-    """
-    inputs: seed_img (Tensor), model
-    outputs: fool_img (Tensor)
-    """
-    set_grad(model, False)
+class Adversary():
     
-    img_var = Variable(seed_img.clone(), requires_grad=True)
+    def __init__(self, model):
+        self.model = model
     
-    for _ in range(n_iters):
+    def generate_example(self, seed_img, target_class, attack, **kwargs):
+        set_grad(self.model, False)
+        img_var = Variable(seed_img.clone(), requires_grad=True)
         
-        scores = model(img_var)
-        objective = scores.squeeze()[target]
-        objective.backward()
+        if attack == 'GA':
+            fool_img = self.GA(img_var, target_class, **kwargs)
+        elif attack == 'FGS':
+            fool_img = self.FGS(img_var, target_class, **kwargs)
+        else:
+            raise Exception('[!] Unknown attack method specified')
         
-        g = img_var.grad.data.clone()
-        img_var.grad.zero_()
-        g = g / g.norm()
+        set_grad(self.model, True)
+        return fool_img
+    
+    
+    
+    # gradient ascent
+    def GA(self, img_var, target, n_iters=100, eta=0.005):
+        for _ in range(n_iters):
+            scores = self.model(img_var)
+            objective = scores.squeeze()[target]
+            objective.backward()
+
+            g = img_var.grad.data.clone()
+            img_var.grad.zero_()
+            g = g / g.norm()
+
+            step = eta * g
+            img_var.data += step.cuda()
+            img_var.data = torch.clamp(img_var.data, min=-1, max=1)
         
-        step = alpha * g
-        img_var.data += step.cuda()
-        img_var.data = torch.clamp(img_var.data, min=-1, max=1)
+        return img_var.data
+
+    # fast gradient sign
+    def FGS(self, img_var, target, n_iters=100, eta=0.005):
+        for _ in range(n_iters):
+            scores = self.model(img_var)
+            objective = scores.squeeze()[target]
+            objective.backward()
+            
+            g = img_var.grad.data.clone()
+            g = g.abs() / (g + 1e-4) # sign of gradient
+            
+            step = eta * g
+            img_var.data += step.cuda()
+            img_var.data = torch.clamp(img_var.data, min=-1, max=1)
+        
+        return img_var.data
     
-    fool_img = img_var.data.clone()
-    
-    set_grad(model, True)
-    return fool_img

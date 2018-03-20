@@ -53,7 +53,7 @@ class CapsuleLayer(nn.Module):
             outputs = self.squash(x.transpose(1, 2))
             # batch_size, out_caps, out_dim
         else:
-            u_hats = (x[:, None, :, None, :] @ self.route_weights[...]).squeeze()
+            u_hats = (x[:, None, :, None, :] @ self.route_weights[...]).squeeze(3)
             u_hats = u_hats.transpose(2, 3)
             # batch_size, out_caps, out_dim, in_caps
             ## batch_size, out_caps, in_caps, out_dim
@@ -66,14 +66,15 @@ class CapsuleLayer(nn.Module):
                 probs = F.softmax(logits, dim=1)
                 # batch_size, in_caps, out_caps
 
-                capsule_s = (u_hats @ probs.transpose(1, 2)[..., None]).squeeze()
+                capsule_s = (u_hats @ probs.transpose(1, 2)[..., None]).squeeze(3)
                 outputs = self.squash(capsule_s)
                 # batch_size, out_caps, out_dim
                 
-                updates = (outputs[..., None, :] @ u_hats).squeeze().transpose(1, 2)
-                # batch_size, in_caps, out_caps
-                
-                logits = logits + updates
+                if i < self.routing_iters - 1:
+                    updates = (outputs[..., None, :] @ u_hats).squeeze(2).transpose(1, 2)
+                    # batch_size, in_caps, out_caps
+
+                    logits = logits + updates
         
         return outputs
 
@@ -95,32 +96,53 @@ class ReconstructionNetwork(nn.Module):
 
 class CapsuleDecoder(nn.Module):
     
-    def __init__(self, reconstruction=True):
+    def __init__(self, reconstruction=True, mask_incorrect=True):
         super().__init__()
         self.reconstruction = reconstruction
         if reconstruction:
             self.decoder = ReconstructionNetwork()
+            self.mask_incorrect = mask_incorrect
     
-    def forward(self, d_caps):
+    def forward(self, d_caps, labels=None):
         logits = torch.norm(d_caps, dim=-1)
-        probs = F.softmax(logits, dim=1) # THIS SHOULD NOT NECESSARILY BE HERE
+        probs = F.softmax(logits, dim=1) # only for single-digit classification task
         if self.reconstruction:
-            img_hats = self.decoder(d_caps.view(d_caps.size(0), -1))
+            if self.mask_incorrect:
+                # mask all but the correct (maximum for unsupervised) digit
+                if labels is None:
+                    _, class_indices = logits.max(1)
+                    identity = Variable(torch.sparse.torch.eye(10)).type(d_caps.data.type())
+                    y = identity.index_select(0, class_indices)
+                else:
+                    y = labels
+                masked_caps = d_caps * y[..., None]
+                decoder_input = masked_caps.view(masked_caps.size(0), -1)
+            else:
+                # or don't -- for some reason this leads to mode collapse!
+                decoder_input = d_caps.view(d_caps.size(0), -1)
+            
+            img_hats = self.decoder(decoder_input)
             return probs, img_hats
         else:
             return probs
 
 class CapsuleLoss(nn.Module):
     
-    def forward(self, probs, labels, reconstructions=None, images=None,
-                mplus=0.9, mminus=0.1, lmbda=0.5, tradeoff=0.0005):
-        present = F.relu(mplus - probs)**2
-        absent = F.relu(probs - mminus)**2
-        margin_loss = labels * present + lmbda * (1 - labels) * absent
-        margin_loss = margin_loss.sum(1)
+    def __init__(self, mplus=0.9, mminus=0.1, lmbda=0.5, tradeoff=0.0005):
+        super().__init__()
+        self.mplus = mplus
+        self.mminus = mminus
+        self.lmbda = lmbda
+        self.tradeoff = tradeoff
+    
+    def forward(self, probs, labels, reconstructions=None, images=None):
+        present = F.relu(self.mplus - probs)**2
+        absent = F.relu(probs - self.mminus)**2
+        margin_loss = labels * present + self.lmbda * (1 - labels) * absent
+        margin_loss = margin_loss.sum(1).sum(0)
         if reconstructions is not None:
-            reconstruction_loss = F.mse_loss(reconstructions, images)
-            loss = margin_loss + tradeoff * reconstruction_loss
+            reconstruction_loss = F.mse_loss(reconstructions, images, size_average=False)
+            loss = margin_loss + self.tradeoff * reconstruction_loss
         else:
             loss = margin_loss
         return loss.mean()

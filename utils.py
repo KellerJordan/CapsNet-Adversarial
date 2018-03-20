@@ -9,7 +9,7 @@ from torch.autograd import Variable
 import torchvision
 
 
-def plot_tensor(img, fs=(10, 10), title=''):
+def plot_tensor(img, fs=(8, 8), title=''):
     # preprocess input
     if type(img) == Variable:
         img = img.data
@@ -19,9 +19,9 @@ def plot_tensor(img, fs=(10, 10), title=''):
     else:
         npimg = img
     if len(npimg.shape) == 4:
-        npimg = np.squeeze(npimg)
+        npimg = npimg[0]
+#         npimg = np.squeeze(npimg)
     npimg = npimg.transpose(1, 2, 0)
-    # display images
     plt.figure(figsize=fs)
     if npimg.shape[2] > 1:
         plt.imshow(npimg)
@@ -113,7 +113,7 @@ class Trainer():
             y_var = self.make_var(one_hotify(y) if self.one_hot else y)
 
             if self.use_reconstructions:
-                scores, reconstructions = self.model(X_var)
+                scores, reconstructions = self.model(X_var, y_var)
                 loss_var = self.criterion(scores, y_var, reconstructions, X_var)
             else:
                 scores = self.model(X_var)
