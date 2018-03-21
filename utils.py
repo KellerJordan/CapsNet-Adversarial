@@ -20,7 +20,6 @@ def plot_tensor(img, fs=(8, 8), title=''):
         npimg = img
     if len(npimg.shape) == 4:
         npimg = npimg[0]
-#         npimg = np.squeeze(npimg)
     npimg = npimg.transpose(1, 2, 0)
     plt.figure(figsize=fs)
     if npimg.shape[2] > 1:
@@ -35,9 +34,8 @@ def plot_batch(samples):
     sample_grid = torchvision.utils.make_grid(samples)
     plot_tensor(sample_grid)
 
-def one_hotify(x):
+def one_hotify(x, n_classes=10):
     x_long = torch.LongTensor(x)
-    n_classes = torch.max(x_long) + 1
     x_onehot = torch.sparse.torch.eye(n_classes).index_select(0, x_long)
     return x_onehot
     

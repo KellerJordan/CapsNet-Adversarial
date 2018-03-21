@@ -12,19 +12,19 @@ class Adversary():
     def __init__(self, model):
         self.model = model
     
-    def generate_example(self, seed_img, target_class, attack, **kwargs):
+    def generate_example(self, seed_img, attack, target=None, ground=None, **kwargs):
         set_grad(self.model, False)
         img_var = Variable(seed_img.clone(), requires_grad=True)
         
         if attack == 'GA':
-            fool_img = self.GA(img_var, target_class, **kwargs)
+            fool_img = self.GA(img_var, target, ground, **kwargs)
         elif attack == 'FGS':
-            fool_img = self.FGS(img_var, target_class, **kwargs)
+            fool_img = self.FGS(img_var, target, ground, **kwargs)
         else:
             raise Exception('[!] Unknown attack method specified')
         
         set_grad(self.model, True)
-        return fool_img
+        return fool_img.data.cpu()
     
     
     
@@ -41,15 +41,19 @@ class Adversary():
 
             step = eta * g
             img_var.data += step.cuda()
-            img_var.data = torch.clamp(img_var.data, min=-1, max=1)
+            img_var.data = torch.clamp(img_var.data, min=0, max=1)
         
-        return img_var.data
+        return img_var
 
     # fast gradient sign
-    def FGS(self, img_var, target, n_iters=100, eta=0.005):
+    def FGS(self, img_var, target=None, ground=None, n_iters=100, eta=0.005):
         for _ in range(n_iters):
-            scores = self.model(img_var)
-            objective = scores.squeeze()[target]
+            scores = self.model(img_var).squeeze()
+            objective = 0
+            if target is not None:
+                objective = objective + scores[target]
+            if ground is not None:
+                objective = objective - scores[ground]
             objective.backward()
             
             g = img_var.grad.data.clone()
@@ -57,7 +61,7 @@ class Adversary():
             
             step = eta * g
             img_var.data += step.cuda()
-            img_var.data = torch.clamp(img_var.data, min=-1, max=1)
+            img_var.data = torch.clamp(img_var.data, min=0, max=1)
         
-        return img_var.data
+        return img_var
     
