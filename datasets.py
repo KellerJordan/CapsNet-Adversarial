@@ -23,6 +23,10 @@ CIFAR10_TST_TRANSFORM = T.Compose([
     T.ToTensor()                 
 ])
 
+CIFAR10_CLASSES = (
+    'airplane', 'automobile', 'bird', 'cat', 'deer',
+    'dog', 'frog', 'horse', 'ship', 'truck')
+
 def get_mnist_dataset(trn_size=60000, tst_size=10000):
     trainset = dset.MNIST(root='./data', train=True,
                           download=True, transform=MNIST_TRN_TRANSFORM)

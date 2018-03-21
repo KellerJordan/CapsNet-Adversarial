@@ -124,7 +124,12 @@ class CapsuleDecoder(nn.Module):
     
     def forward(self, d_caps, labels=None):
         logits = torch.norm(d_caps, dim=-1)
-        probs = F.softmax(logits, dim=1) # only for single-digit classification task
+        
+        # every implementation I have seen runs the norms of (already squashed) digitcaps 
+        # outputs through softmax as follows, but it may be better to use them as 
+        # probabilities of digit presence as in paper
+        probs = F.softmax(logits, dim=1)
+        
         if self.reconstruction:
             if self.mask_incorrect:
                 # mask all but the correct (maximum for unsupervised) digit
@@ -145,6 +150,20 @@ class CapsuleDecoder(nn.Module):
         else:
             return probs
 
+# module to combine the network and decoder to use with utils.Trainer api
+class CapsuleModel(nn.Module):
+    
+    def __init__(self, net, decoder):
+        super().__init__()
+        self.net = net
+        self.decoder = decoder
+    
+    def forward(self, x, y=None):
+        d_caps = self.net(x)
+        probs, reconstructions = self.decoder(d_caps, y)
+        return probs, reconstructions
+
+# loss function for capsule network -- margin loss plus reconstruction loss
 class CapsuleLoss(nn.Module):
     
     def __init__(self, mplus=0.9, mminus=0.1, lmbda=0.5, rcsn_scale=0.0005):

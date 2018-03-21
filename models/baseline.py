@@ -43,9 +43,9 @@ def conv_bn_relu(in_channels, out_channels, kernel_size=3,
 
 class BaselineCNN(nn.Module):
     
-    def __init__(self):
+    def __init__(self, img_colors=1):
         super().__init__()
-        self.conv1 = nn.Conv2d(1, 256, 5, padding=2)
+        self.conv1 = nn.Conv2d(img_colors, 256, 5, padding=2)
         self.conv2 = nn.Conv2d(256, 256, 5, padding=2)
         self.conv3 = nn.Conv2d(256, 128, 5, padding=2)
         flat_dim = 128*28*28
