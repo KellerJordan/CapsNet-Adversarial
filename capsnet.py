@@ -22,11 +22,11 @@ import torch.nn.functional as F
 
 class CapsuleNetwork(nn.Module):
     
-    def __init__(self, primary_caps=32, img_colors=1):
+    def __init__(self, p_caps=32, d_caps_dim=16, img_colors=1):
         super().__init__()
         self.conv1 = nn.Conv2d(img_colors, 256, 9)
-        self.primary_caps = CapsuleLayer('primary', primary_caps=primary_caps)
-        self.digit_caps = CapsuleLayer('digit', primary_caps=primary_caps)
+        self.primary_caps = CapsuleLayer('primary', p_caps=p_caps)
+        self.digit_caps = CapsuleLayer('digit', p_caps=p_caps, d_caps_dim=d_caps_dim)
         
     def forward(self, img):
         relu_conv1 = F.relu(self.conv1(img))
@@ -36,11 +36,11 @@ class CapsuleNetwork(nn.Module):
 
 class CapsuleLayer(nn.Module):
     
-    def __init__(self, caps_type, primary_caps=32, routing_iters=3, use_cuda=True):
+    def __init__(self, caps_type, p_caps=32, d_caps_dim=16, routing_iters=3, use_cuda=True):
         super().__init__()
         self.caps_type = caps_type
         if self.caps_type == 'primary':
-            self.out_caps = primary_caps
+            self.out_caps = p_caps
             self.out_dim = 8
             self.capsules = nn.ModuleList(
                 [nn.Conv2d(256, self.out_dim, 9, 2) for _ in range(self.out_caps)])
@@ -48,8 +48,8 @@ class CapsuleLayer(nn.Module):
         # trained on CIFAR10
         elif self.caps_type == 'digit':
             self.out_caps = 10
-            self.out_dim = 16
-            self.in_caps = primary_caps*6*6
+            self.out_dim = d_caps_dim
+            self.in_caps = p_caps*6*6
             self.in_dim = 8
             self.route_weights = nn.Parameter(torch.randn(
                 self.out_caps, self.in_caps, self.in_dim, self.out_dim))
