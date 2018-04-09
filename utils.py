@@ -28,6 +28,7 @@ def plot_tensor(img, fs=(8, 8), title=''):
         npimg = npimg.squeeze()
         plt.imshow(npimg, cmap='gray')
     plt.title(title)
+    plt.axis('off')
     plt.show()
 
 def plot_batch(samples):
